@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 import re
@@ -195,28 +194,11 @@ def send_email(config: Config, success: bool, report: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Watch a local directory, sync changes, and check rclone status daily.")
-    parser.add_argument("--now", action="store_true", help="run one check immediately, then exit")
-    args = parser.parse_args()
     try:
         config = Config.from_env()
     except ValueError as exc:
         log.error("Configuration error: %s", exc)
         return 2
-    if args.now:
-        success, report = False, ""
-        try:
-            success, report = run_check(config)
-        except Exception as exc:
-            report = f"妫€鏌ョ▼搴忓彂鐢熼敊璇細{type(exc).__name__}: {exc}"
-            log.exception("Health check failed")
-        try:
-            send_email(config, success, report)
-            log.info("Email report sent to %s", config.email_to)
-        except Exception:
-            log.exception("Could not send report email")
-            return 3
-        return 0 if success else 1
     config.local_dir.mkdir(parents=True, exist_ok=True)
     handler = SyncOnChangeHandler(config)
     observer = Observer()
