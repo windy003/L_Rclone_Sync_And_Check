@@ -1,0 +1,14 @@
+[Unit]
+Description=Check Rclone Sync Directory
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Check_Rclone_Sync_Dir
+ExecStart=%h/Check_Rclone_Sync_Dir/.venv/bin/python %h/Check_Rclone_Sync_Dir/main.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
