@@ -1,4 +1,4 @@
-"""Daily rclone sync health check with email reporting."""
+﻿"""Daily rclone sync health check with email reporting."""
 
 from __future__ import annotations
 
@@ -52,6 +52,7 @@ class Config:
     smtp_from: str
     email_to: str
     use_tls: bool
+    use_ssl: bool
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -80,6 +81,7 @@ class Config:
             smtp_from=os.environ["SMTP_FROM"],
             email_to=os.environ["EMAIL_TO"],
             use_tls=os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"},
+            use_ssl=os.getenv("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"},
         )
 
 
@@ -132,9 +134,10 @@ def send_email(config: Config, success: bool, report: str) -> None:
     message["From"] = config.smtp_from
     message["To"] = config.email_to
     message.set_content(f"Check time: {now}\nResult: {'success' if success else 'failure'}\n\n{report}\n")
-    with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as smtp:
+    smtp_class = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
+    with smtp_class(config.smtp_host, config.smtp_port, timeout=30) as smtp:
         smtp.ehlo()
-        if config.use_tls:
+        if config.use_tls and not config.use_ssl:
             smtp.starttls()
             smtp.ehlo()
         smtp.login(config.smtp_username, config.smtp_password)
@@ -185,4 +188,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
