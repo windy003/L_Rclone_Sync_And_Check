@@ -1,4 +1,4 @@
-cp ./Check_Rclone_Dir.service /etc/systemd/system/Check_Rclone_Dir.service
+cp ./Rclone_Sync_And_Check.service /etc/systemd/system/Rclone_Sync_And_Check.service
 systemctl daemon-reload
-systemctl enable Check_Rclone_Dir.service
-systemctl start Check_Rclone_Dir.service
+systemctl enable Rclone_Sync_And_Check.service
+systemctl start Rclone_Sync_And_Check.service
