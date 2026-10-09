@@ -2,7 +2,7 @@
 
 import logging
 
-from main import Config, run_check, send_email
+from main import Config, delete_probe, run_check, send_email
 
 log = logging.getLogger("rclone-healthcheck")
 
@@ -14,9 +14,9 @@ def main() -> int:
         log.error("Configuration error: %s", exc)
         return 2
 
-    success, report = False, ""
+    success, report, marker_name = False, "", None
     try:
-        success, report = run_check(config)
+        success, report, marker_name = run_check(config)
     except Exception as exc:
         report = f"检查程序发生错误：{type(exc).__name__}: {exc}"
         log.exception("Health check failed")
@@ -27,6 +27,9 @@ def main() -> int:
     except Exception:
         log.exception("Could not send report email")
         return 3
+    finally:
+        if marker_name is not None:
+            delete_probe(config, marker_name)
     return 0 if success else 1
 
 

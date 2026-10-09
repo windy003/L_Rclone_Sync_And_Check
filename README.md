@@ -36,4 +36,4 @@ python now.py
 - `EMAIL_SUBJECT_SUCCESS` / `EMAIL_SUBJECT_FAILURE`：成功和失败邮件主题模板；可用 `{time}` 插入发送时间。默认分别为 `[rclone同步成功] {time}` 和 `[rclone同步异常] {time}`。
 - `SMTP_*`、`EMAIL_TO`：邮件服务器、发件账号和收件地址。
 
-`rclone sync` 会让远端内容与本地目录一致，因此也会删除远端中本地已不存在的内容。每日检查的探测文件会保留在本地和远端，名称带日期及随机标识。`.env` 中含密码，已加入 `.gitignore`，请勿提交。
+`rclone sync` 会让远端内容与本地目录一致，因此也会删除远端中本地已不存在的内容。检查邮件发送尝试结束后（无论发送成功或失败），程序都会删除本地探测文件和远端对应文件。`.env` 中含密码，已加入 `.gitignore`，请勿提交。

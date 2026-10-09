@@ -120,19 +120,43 @@ def remote_has_marker(config: Config, name: str) -> tuple[bool, str]:
     return False, (result.stderr or result.stdout or f"rclone exit code {result.returncode}").strip()
 
 
-def run_check(config: Config) -> tuple[bool, str]:
+def run_check(config: Config) -> tuple[bool, str, str]:
     path, name = create_marker(config)
     log.info("Created probe file: %s", path)
     deadline = time.monotonic() + config.timeout
     detail = "灏氭湭鏌ヨ杩滅"
-    while True:
-        found, detail = remote_has_marker(config, name)
-        if found:
-            return True, f"Sync succeeded: found {config.remote}/{name}"
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return False, f"Sync failed or timed out: probe file not found on {config.remote}/{name} within {config.timeout} seconds. Last rclone result: {detail}"
-        time.sleep(min(config.poll_interval, remaining))
+    try:
+        while True:
+            found, detail = remote_has_marker(config, name)
+            if found:
+                return True, f"Sync succeeded: found {config.remote}/{name}", name
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False, f"Sync failed or timed out: probe file not found on {config.remote}/{name} within {config.timeout} seconds. Last rclone result: {detail}", name
+            time.sleep(min(config.poll_interval, remaining))
+    except Exception as exc:
+        return False, f"Health check error: {type(exc).__name__}: {exc}", name
+
+
+def delete_probe(config: Config, name: str) -> None:
+    local_path = config.local_dir / name
+    try:
+        local_path.unlink(missing_ok=True)
+    except OSError:
+        log.exception("Could not delete local probe file %s", local_path)
+
+    try:
+        result = subprocess.run(
+            [config.rclone_bin, "deletefile", f"{config.remote}/{name}"],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        if result.returncode == 0:
+            log.info("Deleted probe file from remote: %s/%s", config.remote, name)
+        else:
+            log.warning("Could not delete remote probe file %s/%s: %s", config.remote, name,
+                        (result.stderr or result.stdout).strip())
+    except (OSError, subprocess.TimeoutExpired):
+        log.exception("Could not delete remote probe file %s/%s", config.remote, name)
 
 
 class SyncOnChangeHandler(FileSystemEventHandler):
@@ -218,9 +242,9 @@ def main() -> int:
             scheduled = next_run(now, config.check_time)
             log.info("Next check: %s", scheduled.isoformat(timespec="minutes"))
             time.sleep(max(0.0, (scheduled - now).total_seconds()))
-            success, report = False, ""
+            success, report, marker_name = False, "", None
             try:
-                success, report = run_check(config)
+                success, report, marker_name = run_check(config)
             except Exception as exc:
                 report = f"检查程序发生错误：{type(exc).__name__}: {exc}"
                 log.exception("Health check failed")
@@ -229,6 +253,9 @@ def main() -> int:
                 log.info("Email report sent to %s", config.email_to)
             except Exception:
                 log.exception("Could not send report email")
+            finally:
+                if marker_name is not None:
+                    delete_probe(config, marker_name)
     except KeyboardInterrupt:
         log.info("Stopping directory watcher")
     finally:
