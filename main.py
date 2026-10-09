@@ -9,6 +9,7 @@ import re
 import smtplib
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from dotenv import load_dotenv
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.observers import Observer
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 logging.basicConfig(
@@ -45,6 +48,7 @@ class Config:
     check_time: str
     timeout: int
     poll_interval: int
+    debounce_seconds: int
     smtp_host: str
     smtp_port: int
     smtp_username: str
@@ -74,6 +78,7 @@ class Config:
             check_time=check_time,
             timeout=env_int("SYNC_TIMEOUT_SECONDS", 60),
             poll_interval=env_int("POLL_INTERVAL_SECONDS", 30),
+            debounce_seconds=env_int("WATCH_DEBOUNCE_SECONDS", 3),
             smtp_host=os.environ["SMTP_HOST"],
             smtp_port=env_int("SMTP_PORT", 587),
             smtp_username=os.environ["SMTP_USERNAME"],
@@ -127,6 +132,51 @@ def run_check(config: Config) -> tuple[bool, str]:
         time.sleep(min(config.poll_interval, remaining))
 
 
+class SyncOnChangeHandler(FileSystemEventHandler):
+    """Debounce filesystem events and mirror the local directory to rclone."""
+
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        self._timer: threading.Timer | None = None
+        self._timer_lock = threading.Lock()
+        self._sync_lock = threading.Lock()
+
+    def on_any_event(self, event: FileSystemEvent) -> None:
+        if event.event_type not in {"created", "modified", "deleted", "moved"}:
+            return
+        if event.is_directory and event.event_type not in {"created", "deleted", "moved"}:
+            return
+        with self._timer_lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(self.config.debounce_seconds, self.sync)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def sync(self) -> None:
+        self._sync_lock.acquire()
+        try:
+            log.info("Syncing %s to %s", self.config.local_dir, self.config.remote)
+            result = subprocess.run(
+                [self.config.rclone_bin, "sync", str(self.config.local_dir), self.config.remote],
+                capture_output=True, text=True, timeout=self.config.timeout, check=False,
+            )
+            if result.returncode == 0:
+                log.info("Sync completed successfully")
+            else:
+                log.error("rclone sync failed (exit %s): %s", result.returncode,
+                          (result.stderr or result.stdout).strip())
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.exception("Could not sync local changes: %s", exc)
+        finally:
+            self._sync_lock.release()
+
+    def cancel_pending(self) -> None:
+        with self._timer_lock:
+            if self._timer is not None:
+                self._timer.cancel()
+
+
 def send_email(config: Config, success: bool, report: str) -> None:
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     message = EmailMessage()
@@ -145,7 +195,7 @@ def send_email(config: Config, success: bool, report: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check rclone sync status and email a report.")
+    parser = argparse.ArgumentParser(description="Watch a local directory, sync changes, and check rclone status daily.")
     parser.add_argument("--now", action="store_true", help="run one check immediately, then exit")
     args = parser.parse_args()
     try:
@@ -167,23 +217,37 @@ def main() -> int:
             log.exception("Could not send report email")
             return 3
         return 0 if success else 1
+    config.local_dir.mkdir(parents=True, exist_ok=True)
+    handler = SyncOnChangeHandler(config)
+    observer = Observer()
+    observer.schedule(handler, str(config.local_dir), recursive=True)
+    observer.start()
+    log.info("Watching %s; changes sync to %s", config.local_dir, config.remote)
+    handler.sync()
     log.info("Daily check scheduled for %s local time", config.check_time)
-    while True:
-        now = datetime.now().astimezone()
-        scheduled = next_run(now, config.check_time)
-        log.info("Next check: %s", scheduled.isoformat(timespec="minutes"))
-        time.sleep(max(0.0, (scheduled - now).total_seconds()))
-        success, report = False, ""
-        try:
-            success, report = run_check(config)
-        except Exception as exc:
-            report = f"妫€鏌ョ▼搴忓彂鐢熼敊璇細{type(exc).__name__}: {exc}"
-            log.exception("Health check failed")
-        try:
-            send_email(config, success, report)
-            log.info("Email report sent to %s", config.email_to)
-        except Exception:
-            log.exception("Could not send report email")
+    try:
+        while True:
+            now = datetime.now().astimezone()
+            scheduled = next_run(now, config.check_time)
+            log.info("Next check: %s", scheduled.isoformat(timespec="minutes"))
+            time.sleep(max(0.0, (scheduled - now).total_seconds()))
+            success, report = False, ""
+            try:
+                success, report = run_check(config)
+            except Exception as exc:
+                report = f"检查程序发生错误：{type(exc).__name__}: {exc}"
+                log.exception("Health check failed")
+            try:
+                send_email(config, success, report)
+                log.info("Email report sent to %s", config.email_to)
+            except Exception:
+                log.exception("Could not send report email")
+    except KeyboardInterrupt:
+        log.info("Stopping directory watcher")
+    finally:
+        handler.cancel_pending()
+        observer.stop()
+        observer.join()
 
 
 if __name__ == "__main__":
