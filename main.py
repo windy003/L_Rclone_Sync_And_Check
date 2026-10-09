@@ -54,6 +54,8 @@ class Config:
     smtp_password: str
     smtp_from: str
     email_to: str
+    email_subject_success: str
+    email_subject_failure: str
     use_tls: bool
     use_ssl: bool
 
@@ -84,6 +86,8 @@ class Config:
             smtp_password=os.environ["SMTP_PASSWORD"],
             smtp_from=os.environ["SMTP_FROM"],
             email_to=os.environ["EMAIL_TO"],
+            email_subject_success=os.getenv("EMAIL_SUBJECT_SUCCESS", "[rclone同步成功] {time}"),
+            email_subject_failure=os.getenv("EMAIL_SUBJECT_FAILURE", "[rclone同步异常] {time}"),
             use_tls=os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"},
             use_ssl=os.getenv("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"},
         )
@@ -179,7 +183,8 @@ class SyncOnChangeHandler(FileSystemEventHandler):
 def send_email(config: Config, success: bool, report: str) -> None:
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     message = EmailMessage()
-    message["Subject"] = f"[rclone鍚屾{'鎴愬姛' if success else '寮傚父'}] {now}"
+    subject_template = config.email_subject_success if success else config.email_subject_failure
+    message["Subject"] = subject_template.replace("{time}", now)
     message["From"] = config.smtp_from
     message["To"] = config.email_to
     message.set_content(f"Check time: {now}\nResult: {'success' if success else 'failure'}\n\n{report}\n")

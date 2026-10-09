@@ -33,6 +33,7 @@ python now.py
 - `LOCAL_SYNC_DIR`：rclone 同步任务监控的本地目录。
 - `CHECK_TIME`：每日检查时间，使用服务器本地时区及 `HH:MM` 格式。
 - `SYNC_TIMEOUT_SECONDS` / `POLL_INTERVAL_SECONDS`：等待同步的最长时间和查询间隔。
+- `EMAIL_SUBJECT_SUCCESS` / `EMAIL_SUBJECT_FAILURE`：成功和失败邮件主题模板；可用 `{time}` 插入发送时间。默认分别为 `[rclone同步成功] {time}` 和 `[rclone同步异常] {time}`。
 - `SMTP_*`、`EMAIL_TO`：邮件服务器、发件账号和收件地址。
 
 `rclone sync` 会让远端内容与本地目录一致，因此也会删除远端中本地已不存在的内容。每日检查的探测文件会保留在本地和远端，名称带日期及随机标识。`.env` 中含密码，已加入 `.gitignore`，请勿提交。
