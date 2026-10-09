@@ -1,4 +1,4 @@
-"""Daily rclone sync health check with email reporting."""
+﻿"""Daily rclone sync health check with email reporting."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ class Config:
             local_dir=Path(os.environ["LOCAL_SYNC_DIR"]).expanduser(),
             rclone_bin=os.getenv("RCLONE_BIN", "rclone"),
             check_time=check_time,
-            timeout=env_int("SYNC_TIMEOUT_SECONDS", 1800),
+            timeout=env_int("SYNC_TIMEOUT_SECONDS", 60),
             poll_interval=env_int("POLL_INTERVAL_SECONDS", 30),
             smtp_host=os.environ["SMTP_HOST"],
             smtp_port=env_int("SMTP_PORT", 587),
@@ -106,7 +106,7 @@ def remote_has_marker(config: Config, name: str) -> tuple[bool, str]:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, str(exc)
     if result.returncode == 0:
-        return True, "文件已在 rclone 远端找到。"
+        return True, "鏂囦欢宸插湪 rclone 杩滅鎵惧埌銆?
     return False, (result.stderr or result.stdout or f"rclone exit code {result.returncode}").strip()
 
 
@@ -114,24 +114,24 @@ def run_check(config: Config) -> tuple[bool, str]:
     path, name = create_marker(config)
     log.info("Created probe file: %s", path)
     deadline = time.monotonic() + config.timeout
-    detail = "尚未查询远端"
+    detail = "灏氭湭鏌ヨ杩滅"
     while True:
         found, detail = remote_has_marker(config, name)
         if found:
-            return True, f"同步成功：远端 {config.remote}/{name} 已找到探测文件。"
+            return True, f"鍚屾鎴愬姛锛氳繙绔?{config.remote}/{name} 宸叉壘鍒版帰娴嬫枃浠躲€?
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return False, f"同步失败或超时：{config.timeout} 秒内未找到远端文件 {config.remote}/{name}。最近一次 rclone 信息：{detail}"
+            return False, f"鍚屾澶辫触鎴栬秴鏃讹細{config.timeout} 绉掑唴鏈壘鍒拌繙绔枃浠?{config.remote}/{name}銆傛渶杩戜竴娆?rclone 淇℃伅锛歿detail}"
         time.sleep(min(config.poll_interval, remaining))
 
 
 def send_email(config: Config, success: bool, report: str) -> None:
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     message = EmailMessage()
-    message["Subject"] = f"[rclone同步{'成功' if success else '异常'}] {now}"
+    message["Subject"] = f"[rclone鍚屾{'鎴愬姛' if success else '寮傚父'}] {now}"
     message["From"] = config.smtp_from
     message["To"] = config.email_to
-    message.set_content(f"检查时间：{now}\n结果：{'成功' if success else '失败'}\n\n{report}\n")
+    message.set_content(f"妫€鏌ユ椂闂达細{now}\n缁撴灉锛歿'鎴愬姛' if success else '澶辫触'}\n\n{report}\n")
     with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as smtp:
         smtp.ehlo()
         if config.use_tls:
@@ -155,7 +155,7 @@ def main() -> int:
         try:
             success, report = run_check(config)
         except Exception as exc:
-            report = f"检查程序发生错误：{type(exc).__name__}: {exc}"
+            report = f"妫€鏌ョ▼搴忓彂鐢熼敊璇細{type(exc).__name__}: {exc}"
             log.exception("Health check failed")
         try:
             send_email(config, success, report)
@@ -174,7 +174,7 @@ def main() -> int:
         try:
             success, report = run_check(config)
         except Exception as exc:
-            report = f"检查程序发生错误：{type(exc).__name__}: {exc}"
+            report = f"妫€鏌ョ▼搴忓彂鐢熼敊璇細{type(exc).__name__}: {exc}"
             log.exception("Health check failed")
         try:
             send_email(config, success, report)
@@ -185,3 +185,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
