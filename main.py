@@ -124,7 +124,7 @@ def run_check(config: Config) -> tuple[bool, str, str]:
     path, name = create_marker(config)
     log.info("Created probe file: %s", path)
     deadline = time.monotonic() + config.timeout
-    detail = "灏氭湭鏌ヨ杩滅"
+    detail = "尚未查询远端"
     try:
         while True:
             found, detail = remote_has_marker(config, name)
