@@ -6,7 +6,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Check_Rclone_Sync_Dir
-ExecStart=%h/Check_Rclone_Sync_Dir/.venv/bin/python %h/Check_Rclone_Sync_Dir/main.py
+ExecStart=%h/L_Rclone_Sync_And_Check/.venv/bin/python %h/L_Rclone_Sync_And_Check/main.py
 Restart=on-failure
 RestartSec=10
 
